@@ -1,0 +1,913 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="Photograph a room, outline the empty spot, pick furniture that fits, see the price and generate a picture.">
+<title>Spotfit Room Planner</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,750&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}img{max-width:100%}[hidden]{display:none!important}
+/* Layout: photo stage on the left like a drafting table, a narrow spec sheet on the right; stacks on phones */
+:root{
+  --bg:#EEF0EC; --surface:#FFFFFF; --sunken:#E3E7E1; --ink:#1B2420; --muted:#5B6862; --line:#D3D9D2;
+  --accent:#B9771E; --accent-soft:#F4E5CC; --accent-ink:#1B1406;
+  --blue:#2D5B86; --ok:#2C7A4B; --ok-soft:#DCEFE2; --bad:#B13E2B; --bad-soft:#F6DDD7;
+  --display:"Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --body:"Instrument Sans", "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#121614; --surface:#1A201D; --sunken:#232B27; --ink:#E6EBE7; --muted:#97A39D; --line:#2E3833;
+  --accent:#E3A548; --accent-soft:#3A2D19; --accent-ink:#1B1406;
+  --blue:#86B5E2; --ok:#63C98E; --ok-soft:#1E3427; --bad:#F08068; --bad-soft:#3B211B; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121614; --surface:#1A201D; --sunken:#232B27; --ink:#E6EBE7; --muted:#97A39D; --line:#2E3833;
+  --accent:#E3A548; --accent-soft:#3A2D19; --accent-ink:#1B1406;
+  --blue:#86B5E2; --ok:#63C98E; --ok-soft:#1E3427; --bad:#F08068; --bad-soft:#3B211B; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5}
+.wrap{max-width:1320px;margin:0 auto;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));padding-block:20px 48px}
+header.top{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 24px;padding-block:4px 18px}
+.brand{font-family:var(--display);font-weight:750;font-size:clamp(26px,3.4vw,36px);letter-spacing:-.02em;margin:0;text-wrap:balance}
+.brand span{color:var(--accent)}
+.tag{color:var(--muted);margin:0;max-width:60ch}
+.steps{display:flex;flex-wrap:wrap;gap:6px 14px;font-family:var(--mono);font-size:12px;color:var(--muted);margin:0 0 14px;padding:0;list-style:none}
+.steps li{display:flex;gap:6px;align-items:center}
+.steps b{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--sunken);color:var(--ink);font-weight:500}
+.steps li.on b{background:var(--accent);color:var(--accent-ink)}
+
+.app{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:20px;align-items:start}
+@media (max-width:980px){.app{grid-template-columns:minmax(0,1fr)}}
+
+.stage{min-width:0;display:flex;flex-direction:column;gap:10px;position:sticky;top:12px}
+@media (max-width:980px){.stage{position:static}}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.bar .grow{flex:1}
+.btn{font:inherit;font-weight:600;font-size:14px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:8px 14px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;line-height:1.2}
+.btn:hover{border-color:var(--muted)}
+.btn:focus-visible,.chip:focus-visible,.card:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{filter:brightness(1.06)}
+.btn.ghost{background:transparent}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.btn svg{width:16px;height:16px;flex:none}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.seg button{font:inherit;font-size:13px;font-weight:600;border:0;background:transparent;color:var(--muted);padding:7px 12px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+
+.canvas-wrap{position:relative;border-radius:10px;overflow:hidden;background:#222;border:1px solid var(--line);touch-action:none}
+.canvas-wrap.drop{outline:3px dashed var(--accent);outline-offset:-6px}
+#cv{display:block;width:100%;height:auto;cursor:crosshair}
+#cv.arrange{cursor:grab}
+.hint{font-size:13px;color:var(--muted);margin:0}
+.hint kbd{font-family:var(--mono);font-size:12px;background:var(--sunken);padding:1px 5px;border-radius:4px}
+.sample-flag{position:absolute;left:10px;top:10px;font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;background:rgba(0,0,0,.6);color:#fff;padding:4px 8px;border-radius:4px}
+
+.panel{min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.sec{padding:16px 18px;border-top:1px solid var(--line)}
+.sec:first-child{border-top:0}
+.sec h2{font-family:var(--display);font-weight:600;font-size:18px;margin:0 0 10px;display:flex;align-items:center;gap:10px;letter-spacing:-.01em}
+.sec h2 .n{font-family:var(--mono);font-size:12px;font-weight:500;color:var(--muted)}
+.dims{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.dims label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.field{display:flex;align-items:center;border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:0 8px}
+.field input{font-family:var(--mono);font-size:15px;width:100%;min-width:0;border:0;background:transparent;color:var(--ink);padding:7px 0;outline:none}
+.field span{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.ai-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
+.status{font-size:13px;color:var(--muted);min-height:1.2em}
+.status.err{color:var(--bad)}
+.room-note{margin:10px 0 0;font-size:14px;background:var(--sunken);border-radius:8px;padding:10px 12px}
+.room-note[hidden]{display:none}
+
+.sugs{display:flex;flex-direction:column;gap:8px}
+.sug{display:grid;grid-template-columns:64px minmax(0,1fr) auto;gap:10px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:8px}
+.sug canvas{width:64px;height:52px;background:var(--sunken);border-radius:6px}
+.sug .t{font-weight:600;font-size:14px}
+.sug .m{font-size:12.5px;color:var(--muted)}
+.sug .p{font-family:var(--mono);font-size:13px}
+.src{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 8px}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(82px,1fr));gap:6px}
+.card{font:inherit;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:6px 4px 6px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--ink)}
+.card canvas{width:64px;height:48px}
+.card span{font-size:12px;font-weight:500;text-align:center;line-height:1.2}
+.card[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+
+.config{margin-top:14px;border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:12px}
+.config h3{margin:0;font-family:var(--display);font-size:16px;font-weight:600}
+.lbl{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
+.sizes{display:flex;flex-direction:column;gap:6px}
+.size{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:7px 10px;cursor:pointer;background:var(--bg)}
+.size input{accent-color:var(--accent)}
+.size .d{font-family:var(--mono);font-size:12.5px;color:var(--muted)}
+.size .k{font-weight:600;font-size:14px}
+.pill{font-family:var(--mono);font-size:11px;padding:2px 7px;border-radius:999px;white-space:nowrap}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}
+.pill.bad{background:var(--bad-soft);color:var(--bad)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:999px;padding:5px 11px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.chip small{color:inherit;opacity:.7;font-family:var(--mono);font-size:11px}
+.swatches{display:flex;flex-wrap:wrap;gap:8px}
+.sw{width:30px;height:30px;border-radius:50%;border:2px solid var(--surface);box-shadow:0 0 0 1px var(--line);cursor:pointer;padding:0}
+.sw[aria-pressed="true"]{box-shadow:0 0 0 2px var(--ink)}
+.addrow{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.price{font-family:var(--mono);font-size:20px;font-weight:500;font-variant-numeric:tabular-nums}
+
+.items{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.items li{display:grid;grid-template-columns:14px minmax(0,1fr) auto auto;gap:10px;align-items:center;font-size:14px;padding:6px 0;border-bottom:1px dashed var(--line)}
+.items .dot{width:14px;height:14px;border-radius:4px;border:1px solid rgba(0,0,0,.15)}
+.items .meta{font-size:12px;color:var(--muted)}
+.items .amt{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:13.5px}
+.x{border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:18px;line-height:1;padding:2px 6px;border-radius:4px}
+.x:hover{color:var(--bad);background:var(--bad-soft)}
+.empty{color:var(--muted);font-size:14px;margin:0}
+.use{margin:12px 0 4px}
+.use .track{height:8px;border-radius:4px;background:var(--sunken);overflow:hidden}
+.use .fill{height:100%;background:var(--ok);width:0;transition:width .25s}
+.use .fill.over{background:var(--bad)}
+.use .cap{display:flex;justify-content:space-between;font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:4px}
+table.sum{width:100%;border-collapse:collapse;margin-top:10px;font-variant-numeric:tabular-nums}
+table.sum td{padding:4px 0;font-size:14px}
+table.sum td:last-child{text-align:right;font-family:var(--mono)}
+table.sum tr.total td{border-top:1px solid var(--ink);padding-top:8px;font-weight:600;font-size:16px}
+.opts{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin-top:10px;font-size:13px}
+.opts label{display:flex;align-items:center;gap:6px;cursor:pointer}
+.opts input[type=checkbox]{accent-color:var(--accent)}
+.rate{display:flex;align-items:center;gap:6px}
+.rate input{width:90px;font-family:var(--mono);font-size:13px;border:1px solid var(--line);border-radius:6px;padding:4px 6px;background:var(--bg);color:var(--ink)}
+.gen{margin-top:14px;width:100%;justify-content:center;padding:12px}
+
+.result{margin-top:28px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px}
+.result h2{font-family:var(--display);font-size:22px;margin:0 0 4px;font-weight:600}
+.result p{margin:0 0 12px;color:var(--muted)}
+.result img{display:block;width:100%;border-radius:8px;border:1px solid var(--line)}
+.result .bar{margin-top:12px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1 class="brand">Spot<span>fit</span></h1>
+    <p class="tag">Photograph a room, outline the empty spot, pick furniture that fits, see the price, and get a picture of the finished room.</p>
+  </header>
+
+  <ol class="steps" id="steps">
+    <li data-s="1"><b>1</b>Photo</li>
+    <li data-s="2"><b>2</b>Outline the empty spot</li>
+    <li data-s="3"><b>3</b>Choose furniture</li>
+    <li data-s="4"><b>4</b>Price and picture</li>
+  </ol>
+
+  <main class="app">
+    <section class="stage" aria-label="Room photo">
+      <div class="bar">
+        <label class="btn primary" for="camIn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Take photo</label>
+        <input id="camIn" type="file" accept="image/*" capture="environment" hidden>
+        <label class="btn" for="fileIn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v4h16v-4"/></svg>Upload photo</label>
+        <input id="fileIn" type="file" accept="image/*" hidden>
+        <button class="btn ghost" id="sampleBtn" type="button">Use sample room</button>
+        <span class="grow"></span>
+        <div class="seg" role="group" aria-label="Photo mode">
+          <button type="button" id="modeMark" aria-pressed="true">Mark spot</button>
+          <button type="button" id="modeMove" aria-pressed="false">Move furniture</button>
+        </div>
+      </div>
+      <div class="canvas-wrap" id="cwrap">
+        <canvas id="cv" width="1400" height="900" aria-label="Room photo with the empty spot outlined"></canvas>
+        <div class="sample-flag" id="sampleFlag">Sample room</div>
+      </div>
+      <p class="hint" id="hint">Drag across the photo to outline the empty spot. The bottom edge of the box is the floor line. You can also drop or paste a photo here.</p>
+    </section>
+
+    <aside class="panel" aria-label="Planner">
+      <div class="sec">
+        <h2><span class="n">02</span>Spot size</h2>
+        <div class="dims">
+          <label for="dW">Width<div class="field"><input id="dW" type="number" min="20" max="1000" value="200" inputmode="numeric"><span>cm</span></div></label>
+          <label for="dD">Depth<div class="field"><input id="dD" type="number" min="10" max="600" value="95" inputmode="numeric"><span>cm</span></div></label>
+          <label for="dH">Max height<div class="field"><input id="dH" type="number" min="20" max="400" value="240" inputmode="numeric"><span>cm</span></div></label>
+        </div>
+        <div class="ai-row" id="aiRow">
+          <button class="btn" id="askBtn" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.8 4.7L18.5 9.5 13.8 11.3 12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>Measure and suggest with Claude</button>
+          <button class="btn ghost" id="stopBtn" type="button" hidden>Stop</button>
+          <span class="status" id="aiStatus"></span>
+        </div>
+        <p class="room-note" id="roomNote" hidden></p>
+      </div>
+
+      <div class="sec">
+        <h2><span class="n">03</span>Suggestions</h2>
+        <p class="src" id="sugSrc">Quick picks for this size</p>
+        <div class="sugs" id="sugs"></div>
+      </div>
+
+      <div class="sec">
+        <h2><span class="n">03</span>All furniture</h2>
+        <div class="grid" id="types"></div>
+        <div class="config" id="config"></div>
+      </div>
+
+      <div class="sec">
+        <h2><span class="n">04</span>In your spot</h2>
+        <ul class="items" id="items"></ul>
+        <div class="use" id="use">
+          <div class="track"><div class="fill" id="useFill"></div></div>
+          <div class="cap"><span id="useTxt"></span><span id="useLeft"></span></div>
+        </div>
+        <table class="sum" id="sum"></table>
+        <div class="opts">
+          <label><input type="checkbox" id="assembly" checked> Assembly ($15 per piece)</label>
+          <div class="seg" role="group" aria-label="Currency">
+            <button type="button" id="curUSD" aria-pressed="true">USD</button>
+            <button type="button" id="curUZS" aria-pressed="false">UZS</button>
+          </div>
+          <label class="rate" id="rateBox" hidden>1 USD =<input id="rate" type="number" value="12500" min="1"> so'm</label>
+        </div>
+        <button class="btn primary gen" id="genBtn" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m3 16 5-5 4 4 3-3 6 6"/><circle cx="15.5" cy="8.5" r="1.5"/></svg>Generate picture</button>
+      </div>
+    </aside>
+  </main>
+
+  <section class="result" id="result" hidden>
+    <h2>Your furnished room</h2>
+    <p id="resCap"></p>
+    <img id="resImg" alt="Room photo with the chosen furniture placed in the empty spot and a price list">
+    <div class="bar">
+      <button class="btn primary" id="saveBtn" type="button">Save image</button>
+      <label class="opts" style="margin:0"><input type="checkbox" id="tagOn" checked> Include price list</label>
+      <span class="status" id="saveStatus"></span>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+"use strict";
+/* ---------- catalog ---------- */
+const TYPES = [
+  {id:"sofa", name:"Sofa", sizes:[{k:"2-seat",w:160,d:85,h:80,p:420},{k:"3-seat",w:210,d:90,h:82,p:620},{k:"Corner",w:250,d:160,h:82,p:980}]},
+  {id:"armchair", name:"Armchair", sizes:[{k:"Compact",w:72,d:75,h:80,p:180},{k:"Lounge",w:88,d:86,h:92,p:290}]},
+  {id:"coffee", name:"Coffee table", sizes:[{k:"Small",w:80,d:60,h:42,p:120},{k:"Long",w:120,d:60,h:42,p:170}]},
+  {id:"side", name:"Side table", sizes:[{k:"Standard",w:45,d:45,h:55,p:70}]},
+  {id:"dining", name:"Dining table", sizes:[{k:"4 seats",w:120,d:80,h:75,p:340},{k:"6 seats",w:180,d:90,h:75,p:520}]},
+  {id:"desk", name:"Desk", sizes:[{k:"Compact",w:100,d:55,h:75,p:190},{k:"Wide",w:140,d:70,h:75,p:280}]},
+  {id:"shelf", name:"Bookshelf", sizes:[{k:"Low",w:80,d:30,h:110,p:140},{k:"Tall",w:80,d:35,h:200,p:230},{k:"Wide",w:160,d:35,h:200,p:390}]},
+  {id:"wardrobe", name:"Wardrobe", sizes:[{k:"2-door",w:100,d:58,h:200,p:450},{k:"3-door",w:150,d:60,h:210,p:690}]},
+  {id:"tv", name:"TV stand", sizes:[{k:"120 cm",w:120,d:40,h:50,p:210},{k:"180 cm",w:180,d:45,h:50,p:300}]},
+  {id:"dresser", name:"Dresser", sizes:[{k:"Narrow",w:80,d:45,h:85,p:260},{k:"Wide",w:120,d:48,h:85,p:380}]},
+  {id:"bed", name:"Bed", sizes:[{k:"Single",w:100,d:205,h:95,p:380},{k:"Double",w:160,d:210,h:100,p:620},{k:"King",w:200,d:215,h:105,p:840}]},
+  {id:"lamp", name:"Floor lamp", sizes:[{k:"Slim",w:30,d:30,h:160,p:75},{k:"Arc",w:42,d:42,h:180,p:120}]},
+  {id:"plant", name:"Plant", sizes:[{k:"Small",w:32,d:32,h:65,p:35},{k:"Large",w:50,d:50,h:150,p:95}]},
+  {id:"rug", name:"Rug", sizes:[{k:"120×170",w:120,d:170,h:1,p:90},{k:"160×230",w:160,d:230,h:1,p:160},{k:"200×300",w:200,d:300,h:1,p:260}]},
+];
+const STYLES = [{k:"Modern",m:1},{k:"Scandinavian",m:1.05},{k:"Classic",m:1.2},{k:"Industrial",m:1.1}];
+const QUAL = [{k:"Budget",m:.8},{k:"Standard",m:1},{k:"Premium",m:1.4}];
+const COLORS = [
+  {k:"Oat",c:"#D8C8AE"},{k:"Charcoal",c:"#3C4046"},{k:"Sage",c:"#8DA488"},{k:"Navy",c:"#2F4568"},
+  {k:"Walnut",c:"#7A5233"},{k:"Rust",c:"#A9583A"},{k:"Chalk",c:"#ECEBE5"},{k:"Mustard",c:"#CF9E35"}];
+const FLOOR_ONLY = new Set(["rug"]);
+const NO_ASSEMBLY = new Set(["rug","plant","lamp"]);
+const T = id => TYPES.find(t => t.id === id);
+
+/* ---------- state ---------- */
+const S = {
+  photo:null, isSample:true, rect:null,
+  dims:{w:200,d:95,h:240},
+  items:[], uid:1,
+  sel:{type:"armchair", size:1, style:"Scandinavian", qual:"Standard", color:"Sage"},
+  mode:"mark", cur:"USD", rate:12500, assembly:true,
+};
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+function shade(hex, a){
+  let n = parseInt(hex.slice(1),16), r=n>>16, g=n>>8&255, b=n&255;
+  const f = a<0 ? 0 : 255, t = Math.abs(a);
+  r = Math.round(r+(f-r)*t); g = Math.round(g+(f-g)*t); b = Math.round(b+(f-b)*t);
+  return "#"+((1<<24)|(r<<16)|(g<<8)|b).toString(16).slice(1);
+}
+function rng(seed){ return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed>>>15, 1|seed); t = t + Math.imul(t ^ t>>>7, 61|t) ^ t; return ((t ^ t>>>14)>>>0)/4294967296; }; }
+function rr(c,x,y,w,h,r){ r=Math.max(0,Math.min(r,w/2,h/2)); c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath(); }
+function fillRR(c,x,y,w,h,r,col){ rr(c,x,y,w,h,r); c.fillStyle=col; c.fill(); }
+const colorOf = k => (COLORS.find(c=>c.k===k)||COLORS[0]).c;
+function priceOf(it){
+  const sz = T(it.type).sizes[it.size];
+  const sm = (STYLES.find(s=>s.k===it.style)||STYLES[0]).m, qm = (QUAL.find(q=>q.k===it.qual)||QUAL[1]).m;
+  return Math.round(sz.p*sm*qm/5)*5;
+}
+function money(usd){
+  if (S.cur === "UZS") return Math.round(usd*S.rate/1000*1000).toLocaleString("en-US").replace(/,/g," ")+" so'm";
+  return "$"+Math.round(usd).toLocaleString("en-US");
+}
+
+/* ---------- furniture drawing (front view, local box W×H) ---------- */
+const LEG = {Modern:"#9BA1A7", Scandinavian:"#C99A68", Classic:"#4C3121", Industrial:"#25282C"};
+function legs(c, W, top, H, style, xs){
+  const col = LEG[style]||LEG.Modern, lh = H-top;
+  for (const fx of xs){
+    const x = W*fx;
+    if (style==="Scandinavian"){
+      const lw = Math.max(3,W*.022), dir = fx<.5?-1:1;
+      c.beginPath(); c.moveTo(x-lw/2,top); c.lineTo(x+lw/2,top); c.lineTo(x+dir*lw*.9+lw*.25,H); c.lineTo(x+dir*lw*.9-lw*.25,H); c.closePath(); c.fillStyle=col; c.fill();
+    } else if (style==="Classic"){
+      const lw = Math.max(4,W*.03);
+      c.fillStyle=col; c.fillRect(x-lw/2, top, lw, lh);
+      c.beginPath(); c.ellipse(x, top+lh*.35, lw*.75, lh*.12, 0, 0, 7); c.fill();
+    } else if (style==="Industrial"){
+      const lw = Math.max(3,W*.018);
+      c.fillStyle=col; c.fillRect(x-lw/2, top, lw, lh);
+    } else {
+      const lw = Math.max(2,W*.012);
+      c.fillStyle=col; c.fillRect(x-lw/2, top, lw, lh);
+    }
+  }
+  if (style==="Industrial" && xs.length>=2){
+    c.fillStyle=LEG.Industrial; const bw=Math.max(2,W*.012);
+    c.fillRect(W*xs[0], H-bw*1.5, W*(xs[xs.length-1]-xs[0]), bw);
+  }
+}
+const DRAW = {
+  sofa(c,W,H,col,st,r,one){
+    const lh=H*.1, bb=H-lh, arm=W*(one?.16:.1);
+    legs(c,W,bb-2,H,st,[.06,.94]);
+    fillRR(c,W*.05,H*.02,W*.9,H*.55,H*.08,shade(col,-.1));
+    const n = one?1:(W/H>2.3?3:2), cw=(W-2*arm)/n;
+    for(let i=0;i<n;i++) fillRR(c,arm+i*cw+2,H*.08,cw-4,H*.4,H*.06,shade(col,.06));
+    fillRR(c,W*.02,H*.48,W*.96,bb-H*.48,H*.06,col);
+    for(let i=0;i<n;i++) fillRR(c,arm+i*cw+2,H*.46,cw-4,H*.16,H*.05,shade(col,.1));
+    fillRR(c,0,H*.3,arm,bb-H*.3,arm*.4,shade(col,-.05));
+    fillRR(c,W-arm,H*.3,arm,bb-H*.3,arm*.4,shade(col,-.05));
+  },
+  armchair(c,W,H,col,st,r){ DRAW.sofa(c,W,H,col,st,r,true); },
+  _table(c,W,H,col,st,shelf){
+    const t=Math.max(4,H*.08);
+    legs(c,W,t,H,st,[.06,.94]);
+    if (shelf){ c.fillStyle=shade(col,-.15); c.fillRect(W*.06,H*.72,W*.88,Math.max(3,t*.6)); }
+    fillRR(c,0,0,W,t,2,col); c.fillStyle=shade(col,-.2); c.fillRect(0,t-2,W,2);
+  },
+  coffee(c,W,H,col,st){ DRAW._table(c,W,H,col,st,true); },
+  side(c,W,H,col,st){ DRAW._table(c,W,H,col,st,true); },
+  dining(c,W,H,col,st){ DRAW._table(c,W,H,col,st,false); },
+  desk(c,W,H,col,st){
+    DRAW._table(c,W,H,col,st,false);
+    const t=Math.max(4,H*.08);
+    fillRR(c,W*.64,t,W*.3,H*.32,2,shade(col,-.08));
+    c.fillStyle=shade(col,-.35); c.fillRect(W*.76,t+H*.15,W*.06,Math.max(2,H*.025));
+  },
+  shelf(c,W,H,col,st,r,hcm){
+    const f=Math.max(4,W*.05), n=Math.max(2,Math.round(hcm/40));
+    fillRR(c,0,0,W,H,2,col);
+    c.fillStyle=shade(col,-.32); c.fillRect(f,f,W-2*f,H-2*f);
+    const step=(H-f)/n, books=["#8C3B2E","#2F4568","#C9A24A","#5D7A5A","#E0D7C6","#3C4046","#9B6B43"];
+    for(let i=0;i<n;i++){
+      const y0=f+i*step, y1=y0+step-f;
+      let x=f+2;
+      while(x<W-f-6){
+        const bw=Math.max(3,W*(.03+r()*.04)), bh=(y1-y0)*(.55+r()*.4);
+        if (r()<.15){ x+=bw*1.5; continue; }
+        if (x+bw>W-f) break;
+        c.fillStyle=books[Math.floor(r()*books.length)]; c.fillRect(x,y1-bh,bw-1,bh); x+=bw;
+      }
+      c.fillStyle=col; c.fillRect(0,y1,W,f);
+    }
+  },
+  wardrobe(c,W,H,col,st,r,hcm,size){
+    const lh=H*.03, doors=size===1?3:2;
+    legs(c,W,H-lh,H,st,[.05,.95]);
+    fillRR(c,0,0,W,H-lh,2,col);
+    c.fillStyle=shade(col,-.15); c.fillRect(0,0,W,H*.03);
+    const dw=W/doors;
+    c.strokeStyle=shade(col,-.25); c.lineWidth=Math.max(1,W*.006);
+    for(let i=1;i<doors;i++){ c.beginPath(); c.moveTo(i*dw,H*.03); c.lineTo(i*dw,H-lh); c.stroke(); }
+    c.fillStyle=st==="Classic"?"#B48A3C":"#8A8F94";
+    for(let i=0;i<doors;i++){ const hx = i%2===0?(i+1)*dw-dw*.1:i*dw+dw*.1; c.fillRect(hx-1.5,H*.42,3,H*.12); }
+  },
+  tv(c,W,H,col,st){
+    const lh=H*.16, bb=H-lh;
+    legs(c,W,bb,H,st,[.05,.95]);
+    fillRR(c,0,0,W,bb,2,col);
+    const n=3, cw=W/n;
+    for(let i=0;i<n;i++){
+      const x=i*cw+W*.02;
+      c.fillStyle= i===1? shade(col,-.4) : shade(col,-.08);
+      c.fillRect(x,H*.1,cw-W*.04,bb-H*.2);
+    }
+  },
+  dresser(c,W,H,col,st){
+    const lh=H*.1, bb=H-lh;
+    legs(c,W,bb,H,st,[.05,.95]);
+    fillRR(c,0,0,W,bb,2,col);
+    const rows=3, rh=(bb-H*.06)/rows;
+    for(let i=0;i<rows;i++){
+      const y=H*.04+i*rh;
+      fillRR(c,W*.04,y+2,W*.92,rh-4,2,shade(col,.05));
+      c.fillStyle=st==="Classic"?"#B48A3C":shade(col,-.45);
+      c.beginPath(); c.arc(W*.35,y+rh/2,Math.max(2,H*.018),0,7); c.arc(W*.65,y+rh/2,Math.max(2,H*.018),0,7); c.fill();
+    }
+  },
+  bed(c,W,H,col,st){
+    const lh=H*.08;
+    legs(c,W,H-lh,H,st,[.03,.97]);
+    fillRR(c,0,0,W,H*.72,H*.05,shade(col,-.08));
+    const pw = W>H*2.2 ? 2 : 1;
+    for(let i=0;i<pw;i++){ const px=W*(pw===2?(i?.55:.08):.2), w=W*(pw===2?.37:.6); fillRR(c,px,H*.3,w,H*.2,H*.08,"#F2EFE8"); }
+    fillRR(c,W*.01,H*.45,W*.98,H*.3,H*.04,"#EDE9E1");
+    fillRR(c,W*.01,H*.55,W*.98,H*.2,H*.04,shade(col,.35));
+    fillRR(c,0,H*.74,W,H*.18,2,col);
+  },
+  lamp(c,W,H,col,st){
+    const g=c.createRadialGradient(W/2,H*.3,2,W/2,H*.3,W*1.1);
+    g.addColorStop(0,"rgba(255,226,160,.45)"); g.addColorStop(1,"rgba(255,226,160,0)");
+    c.fillStyle=g; c.fillRect(-W,0,W*3,H*.8);
+    c.fillStyle=LEG[st]||"#333"; c.fillRect(W/2-Math.max(1.5,W*.03),H*.22,Math.max(3,W*.06),H*.76);
+    c.beginPath(); c.ellipse(W/2,H-H*.015,W*.32,H*.018,0,0,7); c.fill();
+    c.beginPath(); c.moveTo(W*.22,0); c.lineTo(W*.78,0); c.lineTo(W,H*.24); c.lineTo(0,H*.24); c.closePath(); c.fillStyle=col; c.fill();
+    c.fillStyle="rgba(255,240,200,.35)"; c.fillRect(W*.1,H*.22,W*.8,H*.02);
+  },
+  plant(c,W,H,col,st,r){
+    const potTop=H*.68;
+    const greens=["#3F6B3A","#4E7D45","#5E8F50","#35593A"];
+    for(let i=0;i<14;i++){
+      const a = -Math.PI/2 + (r()-.5)*2.2, len=H*(.25+r()*.35);
+      const cx=W/2+Math.cos(a)*len*.55, cy=potTop+Math.sin(a)*len*.9;
+      c.save(); c.translate(cx,cy); c.rotate(a+Math.PI/2);
+      c.beginPath(); c.ellipse(0,0,W*(.08+r()*.07),len*.32,0,0,7); c.fillStyle=greens[i%4]; c.fill(); c.restore();
+    }
+    c.beginPath(); c.moveTo(W*.14,potTop); c.lineTo(W*.86,potTop); c.lineTo(W*.74,H); c.lineTo(W*.26,H); c.closePath(); c.fillStyle=col; c.fill();
+    c.fillStyle=shade(col,-.15); c.fillRect(W*.12,potTop,W*.76,H*.04);
+  },
+};
+
+/* draws one item into its own layer, then shades and composites */
+function drawItem(ctx, it, x, base, ppc, opts={}){
+  const ty=T(it.type), sz=ty.sizes[it.size], col=colorOf(it.color);
+  if (it.type==="rug"){
+    const W=sz.w*ppc, dp=Math.min(sz.d*ppc*.16, W*.35), back=W*.82;
+    const fy=base+dp*.35, by=base-dp*.65, cx=x+W/2;
+    ctx.save();
+    ctx.beginPath(); ctx.moveTo(cx-W/2,fy); ctx.lineTo(cx+W/2,fy); ctx.lineTo(cx+back/2,by); ctx.lineTo(cx-back/2,by); ctx.closePath();
+    ctx.fillStyle=col; ctx.globalAlpha=.95; ctx.fill();
+    ctx.globalAlpha=1; ctx.lineWidth=Math.max(2,W*.02); ctx.strokeStyle=shade(col,-.25); ctx.stroke();
+    ctx.beginPath(); const i=.12; ctx.moveTo(cx-W/2*(1-i),fy-dp*i); ctx.lineTo(cx+W/2*(1-i),fy-dp*i); ctx.lineTo(cx+back/2*(1-i),by+dp*i); ctx.lineTo(cx-back/2*(1-i),by+dp*i); ctx.closePath();
+    ctx.lineWidth=Math.max(1,W*.008); ctx.strokeStyle=shade(col,.3); ctx.stroke();
+    ctx.restore();
+    return {x:cx-W/2, y:by, w:W, h:fy-by};
+  }
+  const W=Math.max(4,sz.w*ppc), H=Math.max(4,sz.h*ppc);
+  const pad=Math.ceil(W);
+  const L=document.createElement("canvas"); L.width=Math.ceil(W+pad*2); L.height=Math.ceil(H+4);
+  const c=L.getContext("2d"); c.translate(pad,0);
+  DRAW[it.type](c,W,H,col,it.style,rng(it.seed||7),sz.h,it.size);
+  c.setTransform(1,0,0,1,0,0);
+  c.globalCompositeOperation="source-atop";
+  const g=c.createLinearGradient(0,0,0,H); g.addColorStop(0,"rgba(255,255,255,.10)"); g.addColorStop(.6,"rgba(0,0,0,0)"); g.addColorStop(1,"rgba(0,0,0,.18)");
+  c.fillStyle=g; c.fillRect(0,0,L.width,L.height);
+  const g2=c.createLinearGradient(0,0,L.width,0); g2.addColorStop(0,"rgba(0,0,0,.08)"); g2.addColorStop(.5,"rgba(0,0,0,0)"); g2.addColorStop(1,"rgba(0,0,0,.10)");
+  c.fillStyle=g2; c.fillRect(0,0,L.width,L.height);
+  // floor shadow
+  if (!opts.thumb){
+    const sw=W*.62, sh=Math.max(5,Math.min(W*.07,H*.12));
+    const sg=ctx.createRadialGradient(x+W/2,base,0,x+W/2,base,sw);
+    sg.addColorStop(0,"rgba(0,0,0,.38)"); sg.addColorStop(1,"rgba(0,0,0,0)");
+    ctx.save(); ctx.translate(x+W/2,base); ctx.scale(1,sh/sw); ctx.translate(-(x+W/2),-base);
+    ctx.fillStyle=sg; ctx.beginPath(); ctx.arc(x+W/2,base,sw,0,7); ctx.fill(); ctx.restore();
+  }
+  ctx.drawImage(L, x-pad, base-H);
+  return {x, y:base-H, w:W, h:H};
+}
+
+function thumb(cv, type, size, color, style){
+  const c=cv.getContext("2d"), dpr=Math.min(2,window.devicePixelRatio||1);
+  const cw=cv.clientWidth||64, ch=cv.clientHeight||48;
+  cv.width=cw*dpr; cv.height=ch*dpr; c.setTransform(dpr,0,0,dpr,0,0); c.clearRect(0,0,cw,ch);
+  const sz=T(type).sizes[size];
+  const it={type,size,color,style,qual:"Standard",seed:3};
+  if (type==="rug"){ const ppc=(cw*.8)/sz.w; drawItem(c,it,cw*.1,ch*.6,ppc,{thumb:true}); return; }
+  const ppc=Math.min((cw*.8)/sz.w,(ch*.85)/sz.h);
+  drawItem(c,it,(cw-sz.w*ppc)/2,ch*.94,ppc,{thumb:true});
+}
+
+/* ---------- sample room ---------- */
+function makeSample(){
+  const W=1400,H=900, cv=document.createElement("canvas"); cv.width=W; cv.height=H;
+  const c=cv.getContext("2d"), floorY=610;
+  let g=c.createLinearGradient(0,0,0,floorY); g.addColorStop(0,"#D9D6CF"); g.addColorStop(1,"#C9C4BA");
+  c.fillStyle=g; c.fillRect(0,0,W,floorY);
+  // window light
+  g=c.createRadialGradient(330,260,20,330,260,700); g.addColorStop(0,"rgba(255,248,230,.55)"); g.addColorStop(1,"rgba(255,248,230,0)");
+  c.fillStyle=g; c.fillRect(0,0,W,floorY);
+  // window
+  c.fillStyle="#EEF2F3"; c.fillRect(170,110,320,360);
+  g=c.createLinearGradient(0,110,0,470); g.addColorStop(0,"#BFD7E6"); g.addColorStop(1,"#E9F1F3"); c.fillStyle=g; c.fillRect(186,126,288,328);
+  c.fillStyle="#EEF2F3"; c.fillRect(325,126,10,328); c.fillRect(186,285,288,10);
+  c.fillStyle="#E5E1D8"; c.fillRect(150,470,360,16);
+  // curtain
+  c.fillStyle="#B9B2A3"; c.fillRect(120,90,50,500); c.fillRect(490,90,50,500);
+  c.fillStyle="#6C665C"; c.fillRect(100,82,460,8);
+  // frame
+  c.fillStyle="#2F2F2F"; c.fillRect(905,170,210,150); c.fillStyle="#E8E3D7"; c.fillRect(917,182,186,126);
+  c.fillStyle="#9EB3A0"; c.beginPath(); c.moveTo(917,308); c.lineTo(985,230); c.lineTo(1040,280); c.lineTo(1070,250); c.lineTo(1103,308); c.fill();
+  c.fillStyle="#D9A441"; c.beginPath(); c.arc(1060,215,14,0,7); c.fill();
+  // baseboard + floor
+  c.fillStyle="#EFEDE7"; c.fillRect(0,floorY-18,W,18);
+  g=c.createLinearGradient(0,floorY,0,H); g.addColorStop(0,"#A57F58"); g.addColorStop(1,"#8A6542"); c.fillStyle=g; c.fillRect(0,floorY,W,H-floorY);
+  c.strokeStyle="rgba(60,38,20,.25)"; c.lineWidth=2;
+  for(let i=-20;i<=20;i++){ c.beginPath(); c.moveTo(W/2+i*70,floorY); c.lineTo(W/2+i*190,H); c.stroke(); }
+  for(let y=floorY+30, s=30; y<H; s*=1.18, y+=s){ c.globalAlpha=.25; c.beginPath(); c.moveTo(0,y); c.lineTo(W,y); c.stroke(); }
+  c.globalAlpha=1;
+  // existing sofa + plant on the left
+  const ppc=2.15, base=700;
+  drawItem(c,{type:"sofa",size:0,color:"Navy",style:"Modern",seed:2},40,base,ppc);
+  drawItem(c,{type:"side",size:0,color:"Walnut",style:"Scandinavian",seed:2},400,base,ppc);
+  drawItem(c,{type:"plant",size:1,color:"Chalk",style:"Modern",seed:11},540,base-30,ppc*.9);
+  return cv;
+}
+
+/* ---------- canvas & interaction ---------- */
+const cv=$("cv"), ctx=cv.getContext("2d");
+let hits=[];
+function ppc(){ return S.rect ? S.rect.w / Math.max(1,S.dims.w) : 1; }
+
+function layoutDefaults(){
+  // pack non-rug items left to right with 8 cm gaps
+  let x=0;
+  for (const it of S.items){
+    if (FLOOR_ONLY.has(it.type)){ if (it.off==null) it.off=(S.dims.w-T(it.type).sizes[it.size].w)/2; continue; }
+    if (it.off==null){ it.off=x; }
+    x = Math.max(x, it.off + T(it.type).sizes[it.size].w + 8);
+  }
+}
+
+function render(target=ctx, opts={guides:true}){
+  const c=target, cw=S.photo.width, ch=S.photo.height;
+  if (target===ctx){ if (cv.width!==cw||cv.height!==ch){ cv.width=cw; cv.height=ch; } }
+  c.drawImage(S.photo,0,0);
+  hits=[];
+  if (!S.rect) return;
+  const r=S.rect, p=ppc(), base=r.y+r.h;
+  layoutDefaults();
+  const order=[...S.items].sort((a,b)=>(FLOOR_ONLY.has(b.type)?1:0)-(FLOOR_ONLY.has(a.type)?1:0));
+  for (const it of order){
+    const box=drawItem(c,it,r.x+it.off*p,base,p);
+    if (target===ctx) hits.push({it,box});
+    if (opts.guides && !fits(it)){
+      c.save(); c.strokeStyle="#FF5A3D"; c.lineWidth=Math.max(2,cw/500); c.setLineDash([8,6]); c.strokeRect(box.x,box.y,box.w,box.h); c.restore();
+    }
+  }
+  if (opts.guides){
+    const lw=Math.max(2,cw/450);
+    c.save();
+    c.fillStyle="rgba(255,176,32,.08)"; c.fillRect(r.x,r.y,r.w,r.h);
+    c.strokeStyle="#FFB020"; c.lineWidth=lw; c.setLineDash([lw*5,lw*3]); c.strokeRect(r.x,r.y,r.w,r.h);
+    c.setLineDash([]); c.lineWidth=lw*1.6; c.beginPath(); c.moveTo(r.x,base); c.lineTo(r.x+r.w,base); c.stroke();
+    const fs=Math.max(12,Math.round(cw/80));
+    c.font=`500 ${fs}px "JetBrains Mono", monospace`;
+    const label=`${S.dims.w} cm wide · ${S.dims.d} deep`;
+    const tw=c.measureText(label).width+fs;
+    const ly = r.y - fs*1.9 < 0 ? r.y + 4 : r.y - fs*1.9;
+    c.fillStyle="#FFB020"; rr(c,r.x,ly,tw,fs*1.6,4); c.fill();
+    c.fillStyle="#1B1406"; c.fillText(label,r.x+fs/2,ly+fs*1.15);
+    c.restore();
+  }
+}
+
+function pt(e){ const b=cv.getBoundingClientRect(); return {x:(e.clientX-b.left)*cv.width/b.width, y:(e.clientY-b.top)*cv.height/b.height}; }
+let drag=null;
+cv.addEventListener("pointerdown", e=>{
+  const p=pt(e); cv.setPointerCapture(e.pointerId);
+  if (S.mode==="move"){
+    for (let i=hits.length-1;i>=0;i--){ const b=hits[i].box; if (p.x>=b.x&&p.x<=b.x+b.w&&p.y>=b.y&&p.y<=b.y+b.h){ drag={kind:"item",it:hits[i].it,sx:p.x,so:hits[i].it.off}; cv.style.cursor="grabbing"; return; } }
+    return;
+  }
+  drag={kind:"rect",sx:p.x,sy:p.y};
+});
+cv.addEventListener("pointermove", e=>{
+  if (!drag) return; const p=pt(e);
+  if (drag.kind==="item"){ drag.it.off=Math.round(drag.so+(p.x-drag.sx)/ppc()); render(); return; }
+  const x=Math.min(drag.sx,p.x), y=Math.min(drag.sy,p.y), w=Math.abs(p.x-drag.sx), h=Math.abs(p.y-drag.sy);
+  if (w>12&&h>12){ S.rect={x,y,w,h}; render(); }
+});
+const endDrag=()=>{ if(!drag) return; const k=drag.kind; drag=null; cv.style.cursor=""; if(k==="rect"){ S.items.forEach(i=>i.off=null); render(); refresh(); } };
+cv.addEventListener("pointerup", endDrag); cv.addEventListener("pointercancel", endDrag);
+
+function setMode(m){
+  S.mode=m; $("modeMark").setAttribute("aria-pressed",m==="mark"); $("modeMove").setAttribute("aria-pressed",m==="move");
+  cv.classList.toggle("arrange",m==="move");
+  $("hint").textContent = m==="mark"
+    ? "Drag across the photo to outline the empty spot. The bottom edge of the box is the floor line. You can also drop or paste a photo here."
+    : "Drag a piece of furniture left or right to change where it stands in the spot.";
+}
+$("modeMark").onclick=()=>setMode("mark"); $("modeMove").onclick=()=>setMode("move");
+
+/* ---------- photo input ---------- */
+function loadFile(f){
+  if (!f || !/^image\//.test(f.type)) { setStatus("That file isn't an image. Choose a JPG or PNG photo.", true); return; }
+  const url=URL.createObjectURL(f), img=new Image();
+  img.onload=()=>{
+    const max=1600, s=Math.min(1, max/Math.max(img.naturalWidth,img.naturalHeight));
+    const pc=document.createElement("canvas"); pc.width=Math.round(img.naturalWidth*s); pc.height=Math.round(img.naturalHeight*s);
+    pc.getContext("2d").drawImage(img,0,0,pc.width,pc.height); URL.revokeObjectURL(url);
+    S.photo=pc; S.isSample=false;
+    S.rect={x:pc.width*.3,y:pc.height*.38,w:pc.width*.4,h:pc.height*.42};
+    S.items.forEach(i=>i.off=null);
+    $("sampleFlag").hidden=true; $("roomNote").hidden=true;
+    setMode("mark"); render(); refresh(); setStatus("Photo loaded. Drag to outline the empty spot.");
+  };
+  img.onerror=()=>{ setStatus("This photo couldn't be opened. Try saving it as JPG first.", true); };
+  img.src=url;
+}
+$("camIn").onchange=e=>{ loadFile(e.target.files[0]); e.target.value=""; };
+$("fileIn").onchange=e=>{ loadFile(e.target.files[0]); e.target.value=""; };
+const wrapEl=$("cwrap");
+wrapEl.addEventListener("dragover",e=>{e.preventDefault(); wrapEl.classList.add("drop");});
+wrapEl.addEventListener("dragleave",()=>wrapEl.classList.remove("drop"));
+wrapEl.addEventListener("drop",e=>{e.preventDefault(); wrapEl.classList.remove("drop"); loadFile(e.dataTransfer.files[0]);});
+document.addEventListener("paste",e=>{ const f=[...(e.clipboardData?.files||[])].find(f=>/^image\//.test(f.type)); if(f) loadFile(f); });
+function useSample(){
+  S.photo=makeSample(); S.isSample=true; S.rect={x:800,y:330,w:430,h:370};
+  S.dims={w:200,d:95,h:240}; syncDims(); S.items.forEach(i=>i.off=null);
+  $("sampleFlag").hidden=false; $("roomNote").hidden=true; render(); refresh();
+}
+$("sampleBtn").onclick=useSample;
+
+/* ---------- dims ---------- */
+function syncDims(){ $("dW").value=S.dims.w; $("dD").value=S.dims.d; $("dH").value=S.dims.h; }
+for (const [id,k] of [["dW","w"],["dD","d"],["dH","h"]]){
+  $(id).addEventListener("input",e=>{ const v=Math.round(+e.target.value); if(v>0){ S.dims[k]=v; S.items.forEach(i=>i.off=null); render(); refresh(); } });
+}
+
+/* ---------- fit ---------- */
+function usedWidth(except){ return S.items.filter(i=>!FLOOR_ONLY.has(i.type)&&i!==except).reduce((a,i)=>a+T(i.type).sizes[i.size].w,0); }
+function fitReason(type,size,except){
+  const sz=T(type).sizes[size];
+  if (FLOOR_ONLY.has(type)) return sz.w>S.dims.w+40 ? `${sz.w-S.dims.w} cm wider than the spot` : null;
+  if (sz.h>S.dims.h) return `${sz.h-S.dims.h} cm too tall`;
+  if (sz.d>S.dims.d) return `${sz.d-S.dims.d} cm too deep`;
+  const left=S.dims.w-usedWidth(except);
+  if (sz.w>left) return left<=0 ? "no width left" : `${sz.w-left} cm too wide`;
+  return null;
+}
+const fits = it => !fitReason(it.type,it.size,it);
+
+/* ---------- catalog UI ---------- */
+function buildTypes(){
+  const g=$("types"); g.innerHTML="";
+  for (const t of TYPES){
+    const b=document.createElement("button"); b.type="button"; b.className="card"; b.id="type-"+t.id;
+    b.setAttribute("aria-pressed", t.id===S.sel.type);
+    b.innerHTML=`<canvas></canvas><span>${t.name}</span>`;
+    b.onclick=()=>{ S.sel.type=t.id; S.sel.size=bestSize(t.id); buildTypes(); buildConfig(); };
+    g.append(b);
+    requestAnimationFrame(()=>thumb(b.querySelector("canvas"), t.id, Math.min(1,t.sizes.length-1), S.sel.color, S.sel.style));
+  }
+}
+function bestSize(type){
+  const t=T(type); let best=0;
+  t.sizes.forEach((s,i)=>{ if(!fitReason(type,i)) best=i; });
+  return best;
+}
+function buildConfig(){
+  const t=T(S.sel.type), box=$("config"), sel=S.sel;
+  const draft={...sel, type:t.id};
+  box.innerHTML=`
+    <h3>${t.name}</h3>
+    <div><div class="lbl">Size</div><div class="sizes">${t.sizes.map((s,i)=>{
+      const why=fitReason(t.id,i);
+      return `<label class="size"><input type="radio" name="sz" value="${i}" ${i===sel.size?"checked":""}>
+        <span><span class="k">${s.k}</span><br><span class="d">${s.w} × ${s.d} × ${s.h>1?s.h:"–"} cm</span></span>
+        <span class="pill ${why?"bad":"ok"}">${why?why:"Fits"}</span></label>`;}).join("")}</div></div>
+    <div><div class="lbl">Style</div><div class="chips">${STYLES.map(s=>`<button type="button" class="chip" data-st="${s.k}" aria-pressed="${s.k===sel.style}">${s.k}</button>`).join("")}</div></div>
+    <div><div class="lbl">Quality</div><div class="chips">${QUAL.map(q=>`<button type="button" class="chip" data-q="${q.k}" aria-pressed="${q.k===sel.qual}">${q.k} <small>×${q.m}</small></button>`).join("")}</div></div>
+    <div><div class="lbl">Colour · ${sel.color}</div><div class="swatches">${COLORS.map(c=>`<button type="button" class="sw" data-c="${c.k}" title="${c.k}" aria-label="${c.k}" aria-pressed="${c.k===sel.color}" style="background:${c.c}"></button>`).join("")}</div></div>
+    <div class="addrow"><span class="price">${money(priceOf(draft))}</span><button type="button" class="btn primary" id="addBtn">Add to spot</button></div>`;
+  box.querySelectorAll("input[name=sz]").forEach(r=>r.onchange=()=>{ sel.size=+r.value; buildConfig(); });
+  box.querySelectorAll("[data-st]").forEach(b=>b.onclick=()=>{ sel.style=b.dataset.st; buildConfig(); });
+  box.querySelectorAll("[data-q]").forEach(b=>b.onclick=()=>{ sel.qual=b.dataset.q; buildConfig(); });
+  box.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>{ sel.color=b.dataset.c; buildConfig(); });
+  $("addBtn").onclick=()=>addItem({type:t.id,size:sel.size,style:sel.style,qual:sel.qual,color:sel.color});
+}
+function addItem(o){
+  S.items.push({...o, qual:o.qual||"Standard", uid:S.uid++, seed:Math.floor(Math.random()*1e6), off:null});
+  render(); refresh();
+}
+
+/* ---------- suggestions ---------- */
+let claudeSugs=null;
+function quickPicks(){
+  const picks=[], tall=S.dims.h>=150, w=S.dims.w;
+  const order = tall ? ["shelf","wardrobe","sofa","desk","dresser","armchair"] : ["sofa","tv","dresser","desk","armchair","coffee"];
+  for (const id of order){
+    const t=T(id); let si=-1;
+    t.sizes.forEach((s,i)=>{ if(s.w<=w && s.d<=S.dims.d && s.h<=S.dims.h) si=i; });
+    if (si>=0){ picks.push({type:id,size:si,style:"Scandinavian",color:id==="sofa"||id==="armchair"?"Sage":"Walnut",reason:`Uses ${t.sizes[si].w} of ${w} cm`}); }
+    if (picks.length===2) break;
+  }
+  const left = w - (picks[0]?T(picks[0].type).sizes[picks[0].size].w:0);
+  if (left>=45) picks.push({type:"lamp",size:left>=55?1:0,style:"Modern",color:"Oat",reason:"Fills the gap beside it with light"});
+  else if (left>=35) picks.push({type:"plant",size:S.dims.h>=150?1:0,style:"Modern",color:"Chalk",reason:"Small enough for the leftover gap"});
+  return picks.slice(0,4);
+}
+function buildSugs(){
+  const list=claudeSugs||quickPicks(), box=$("sugs"); box.innerHTML="";
+  $("sugSrc").textContent = claudeSugs ? "Suggested by Claude for this room" : "Quick picks for this size";
+  if (!list.length){ box.innerHTML=`<p class="empty">Nothing in the catalog fits a spot this small. Try a bigger outline.</p>`; return; }
+  for (const s of list){
+    const t=T(s.type), sz=t.sizes[s.size], draft={type:s.type,size:s.size,style:s.style,qual:"Standard",color:s.color};
+    const why=fitReason(s.type,s.size);
+    const d=document.createElement("div"); d.className="sug";
+    d.innerHTML=`<canvas></canvas><div style="min-width:0"><div class="t">${t.name} · ${sz.k}</div>
+      <div class="m"></div><div class="p">${money(priceOf(draft))} <span class="pill ${why?"bad":"ok"}">${why||"Fits"}</span></div></div>
+      <button type="button" class="btn">Add</button>`;
+    d.querySelector(".m").textContent=`${s.style} · ${s.color} — ${s.reason||""}`;
+    d.querySelector("button").onclick=()=>addItem(draft);
+    box.append(d);
+    requestAnimationFrame(()=>thumb(d.querySelector("canvas"),s.type,s.size,s.color,s.style));
+  }
+}
+
+/* ---------- items + price ---------- */
+function refresh(){
+  const ul=$("items"); ul.innerHTML="";
+  if (!S.items.length) ul.innerHTML=`<li style="display:block;border:0"><p class="empty">Nothing added yet. Pick a suggestion or choose from the furniture list.</p></li>`;
+  for (const it of S.items){
+    const t=T(it.type), sz=t.sizes[it.size], why=fitReason(it.type,it.size,it);
+    const li=document.createElement("li");
+    li.innerHTML=`<span class="dot" style="background:${colorOf(it.color)}"></span>
+      <span style="min-width:0">${t.name} · ${sz.k}<br><span class="meta">${it.style} · ${it.qual} · ${sz.w}×${sz.d} cm${why?` · <span style="color:var(--bad)">${why}</span>`:""}</span></span>
+      <span class="amt">${money(priceOf(it))}</span><button class="x" type="button" aria-label="Remove ${t.name}">×</button>`;
+    li.querySelector(".x").onclick=()=>{ S.items=S.items.filter(i=>i!==it); render(); refresh(); };
+    ul.append(li);
+  }
+  const used=usedWidth(), pct=Math.min(100,used/S.dims.w*100);
+  $("useFill").style.width=pct+"%"; $("useFill").classList.toggle("over",used>S.dims.w);
+  $("useTxt").textContent=`Width used ${used} / ${S.dims.w} cm`;
+  $("useLeft").textContent= used>S.dims.w ? `${used-S.dims.w} cm over` : `${S.dims.w-used} cm free`;
+  const sub=S.items.reduce((a,i)=>a+priceOf(i),0);
+  const asm=S.assembly ? S.items.filter(i=>!NO_ASSEMBLY.has(i.type)).length*15 : 0;
+  const del=S.items.length ? (sub>=500?0:25) : 0;
+  $("sum").innerHTML=`<tr><td>Furniture (${S.items.length})</td><td>${money(sub)}</td></tr>
+    <tr><td>Delivery${sub>=500&&S.items.length?" (free over $500)":""}</td><td>${del?money(del):"Free"}</td></tr>
+    <tr><td>Assembly</td><td>${asm?money(asm):"—"}</td></tr>
+    <tr class="total"><td>Total</td><td>${money(sub+del+asm)}</td></tr>`;
+  S.total={sub,del,asm,all:sub+del+asm};
+  $("genBtn").disabled=!S.items.length;
+  const step = S.items.length?4:(S.rect?3:2);
+  document.querySelectorAll("#steps li").forEach(li=>li.classList.toggle("on",+li.dataset.s<=step));
+  buildSugs(); buildConfig();
+}
+$("assembly").onchange=e=>{ S.assembly=e.target.checked; refresh(); };
+function setCur(c){ S.cur=c; $("curUSD").setAttribute("aria-pressed",c==="USD"); $("curUZS").setAttribute("aria-pressed",c==="UZS"); $("rateBox").hidden=c!=="UZS"; refresh(); if(!$("result").hidden) generate(); }
+$("curUSD").onclick=()=>setCur("USD"); $("curUZS").onclick=()=>setCur("UZS");
+$("rate").oninput=e=>{ const v=+e.target.value; if(v>0){ S.rate=v; refresh(); } };
+
+/* ---------- generate picture ---------- */
+let lastBlob=null;
+async function generate(){
+  try{ await document.fonts.ready; }catch(_){}
+  const pw=S.photo.width, ph=S.photo.height, withTag=$("tagOn").checked;
+  const rows=S.items.length, fs=Math.max(14,Math.round(pw/70)), lh=fs*1.55;
+  const strip = withTag ? Math.round(fs*3.4 + Math.ceil(rows/2)*lh + lh*1.4) : 0;
+  const out=document.createElement("canvas"); out.width=pw; out.height=ph+strip;
+  const c=out.getContext("2d");
+  render(c,{guides:false});
+  if (withTag){
+    c.fillStyle="#F7F6F2"; c.fillRect(0,ph,pw,strip);
+    c.fillStyle="#B9771E"; c.fillRect(0,ph,pw,Math.max(3,fs*.25));
+    const px=fs*1.4; let y=ph+fs*2.3;
+    c.fillStyle="#1B2420"; c.font=`750 ${Math.round(fs*1.25)}px "Bricolage Grotesque", sans-serif`; c.fillText("Spotfit plan",px,y);
+    c.font=`400 ${fs}px "Instrument Sans", sans-serif`; c.fillStyle="#5B6862";
+    c.fillText(`Spot ${S.dims.w} × ${S.dims.d} cm`, px + c.measureText("Spotfit plan").width*1.25 + fs, y);
+    y+=lh*1.2;
+    const colW=(pw-px*2)/2;
+    S.items.forEach((it,i)=>{
+      const t=T(it.type), sz=t.sizes[it.size], cx=px+(i%2)*colW, cy=y+Math.floor(i/2)*lh;
+      c.fillStyle=colorOf(it.color); c.fillRect(cx,cy-fs*.8,fs*.8,fs*.8);
+      c.fillStyle="#1B2420"; c.font=`500 ${fs}px "Instrument Sans", sans-serif`;
+      c.fillText(`${t.name} ${sz.k} · ${it.style}`, cx+fs*1.3, cy);
+      c.font=`500 ${fs}px "JetBrains Mono", monospace`; const m=money(priceOf(it));
+      c.fillText(m, cx+colW-fs*1.2-c.measureText(m).width, cy);
+    });
+    y+=Math.ceil(rows/2)*lh+lh*.2;
+    c.fillStyle="#1B2420"; c.font=`600 ${Math.round(fs*1.15)}px "Instrument Sans", sans-serif`;
+    const tot=`Total ${money(S.total.all)}`, extra=`incl. delivery ${S.total.del?money(S.total.del):"free"}${S.total.asm?`, assembly ${money(S.total.asm)}`:""}`;
+    c.fillText(tot,px,y);
+    c.font=`400 ${fs}px "Instrument Sans", sans-serif`; c.fillStyle="#5B6862";
+    c.fillText(extra, px + c.measureText(tot).width*1.2 + fs, y);
+  }
+  $("resImg").src=out.toDataURL("image/jpeg",.9);
+  out.toBlob(b=>{ lastBlob=b; },"image/png");
+  $("resCap").textContent=`${S.items.length} piece${S.items.length===1?"":"s"} placed in a ${S.dims.w} cm spot. Total ${money(S.total.all)}. Drawings show size, colour and style; real products will look different.`;
+  $("result").hidden=false;
+}
+$("genBtn").onclick=async()=>{ await generate(); $("result").scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:"start"}); };
+$("tagOn").onchange=generate;
+
+let downloads=null;
+$("saveBtn").onclick=async()=>{
+  const st=$("saveStatus");
+  if (!lastBlob){ st.textContent="Generate the picture first."; return; }
+  if (!downloads){
+    const a=document.createElement("a"); a.href=URL.createObjectURL(lastBlob); a.download="spotfit-room.png";
+    document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+    st.textContent="Saved."; return;
+  }
+  try{ await downloads.save({filename:"spotfit-room.png",data:lastBlob}); st.textContent="Saved."; }
+  catch(e){ st.textContent = e?.code==="declined" ? "Save cancelled." : "Couldn't save here. Right-click or long-press the image instead."; }
+};
+
+/* ---------- Claude ---------- */
+function setStatus(t,err){ const s=$("aiStatus"); s.textContent=t; s.classList.toggle("err",!!err); }
+let sample=null, ctl=null;
+function catalogText(){
+  return TYPES.map(t=>`${t.id} (${t.name}): `+t.sizes.map(s=>`"${s.k}" ${s.w}x${s.d}x${s.h}cm`).join(", ")).join("\n");
+}
+function markedPhotoBlob(){
+  return new Promise(res=>{
+    const c=document.createElement("canvas"), s=Math.min(1,1200/Math.max(S.photo.width,S.photo.height));
+    c.width=Math.round(S.photo.width*s); c.height=Math.round(S.photo.height*s);
+    const x=c.getContext("2d"); x.drawImage(S.photo,0,0,c.width,c.height);
+    const r=S.rect; x.strokeStyle="#FF8A00"; x.lineWidth=Math.max(3,c.width/200); x.strokeRect(r.x*s,r.y*s,r.w*s,r.h*s);
+    c.toBlob(b=>res(b),"image/jpeg",.88);
+  });
+}
+async function ask(){
+  if (!(sample||apiOn) || !S.rect) return;
+  ctl=new AbortController(); $("askBtn").disabled=true; $("stopBtn").hidden=false; setStatus("Claude is looking at the room…");
+  const prompt=`This photo shows a room. The empty spot the person wants to furnish is outlined with an orange rectangle; its bottom edge is the floor line.
+1. Estimate the real size of the outlined spot in centimeters using clues like doors, windows, outlets, ceiling height and existing furniture. Current guess from the person: ${S.dims.w} wide, ${S.dims.d} deep, ${S.dims.h} high.
+2. Briefly describe the room (type and style) in one sentence.
+3. Suggest 2 to 4 pieces from this catalog that together fit the spot's width and match the room. Use exact ids and size names.
+Catalog (id, sizes as width x depth x height):
+${catalogText()}
+Styles: ${STYLES.map(s=>s.k).join(", ")}. Colours: ${COLORS.map(c=>c.k).join(", ")}.
+Reply with only JSON like:
+{"room":"Bright living room, modern Scandinavian","spot":{"width_cm":190,"depth_cm":80,"height_cm":240},"suggestions":[{"type":"shelf","size":"Tall","style":"Scandinavian","color":"Walnut","reason":"short reason"}]}`;
+  try{
+    const blob=await markedPhotoBlob();
+    const j=sample ? await sample.json(prompt,{images:blob,signal:ctl.signal}) : await apiJson(prompt,blob,ctl.signal);
+    const sp=j?.spot||{};
+    const clamp=(v,lo,hi,d)=>{ v=Math.round(+v); return v>=lo&&v<=hi?v:d; };
+    S.dims={w:clamp(sp.width_cm,20,1000,S.dims.w), d:clamp(sp.depth_cm,10,600,S.dims.d), h:clamp(sp.height_cm,20,400,S.dims.h)};
+    syncDims(); S.items.forEach(i=>i.off=null);
+    claudeSugs=(Array.isArray(j?.suggestions)?j.suggestions:[]).map(s=>{
+      const t=T(String(s.type||"").toLowerCase()); if(!t) return null;
+      let si=t.sizes.findIndex(z=>z.k.toLowerCase()===String(s.size||"").toLowerCase()); if(si<0) si=0;
+      const st=STYLES.find(x=>x.k.toLowerCase()===String(s.style||"").toLowerCase())?.k||"Modern";
+      const co=COLORS.find(x=>x.k.toLowerCase()===String(s.color||"").toLowerCase())?.k||"Oat";
+      return {type:t.id,size:si,style:st,color:co,reason:String(s.reason||"").slice(0,120)};
+    }).filter(Boolean).slice(0,4);
+    if (!claudeSugs.length) claudeSugs=null;
+    const note=$("roomNote"); note.hidden=!j?.room; note.textContent = j?.room ? `${j.room}. Spot estimated at ${S.dims.w} × ${S.dims.d} cm, up to ${S.dims.h} cm high — adjust if you measured it.` : "";
+    setStatus(""); render(); refresh();
+  }catch(e){
+    const m={cancelled:"",not_granted:"Claude wasn't allowed for this page.",rate_limited:"Too many requests. Try again in a minute.",
+      invalid_json:"Claude's answer couldn't be read. Try again.",image_rejected:"This photo couldn't be sent. Try a smaller JPG.",refused:"Claude couldn't help with this photo."};
+    setStatus(e?.code in m ? m[e.code] : "Something went wrong. Try again.", e?.code!=="cancelled");
+    if (e?.code==="not_granted"||e?.code==="sampling_disabled"||e?.code==="images_unavailable") $("askBtn").hidden=true;
+  }finally{ $("askBtn").disabled=false; $("stopBtn").hidden=true; ctl=null; }
+}
+$("askBtn").onclick=ask; $("stopBtn").onclick=()=>ctl?.abort();
+
+/* ---------- boot ---------- */
+$("askBtn").hidden=true;
+useSample(); buildTypes(); refresh();
+document.fonts?.ready?.then(()=>render());
+let apiOn=false;
+async function apiJson(prompt, blob, signal){
+  const b64=await new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(String(fr.result).split(",")[1]); fr.onerror=rej; fr.readAsDataURL(blob); });
+  let r;
+  try{ r=await fetch("/api/analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prompt,image:b64,mediaType:blob.type||"image/jpeg"}),signal}); }
+  catch(e){ throw {code: e?.name==="AbortError"?"cancelled":"upstream_error"}; }
+  if (r.status===429) throw {code:"rate_limited"};
+  if (!r.ok) throw {code:"upstream_error"};
+  const {text}=await r.json();
+  try{ return JSON.parse(text); }catch(_){}
+  const m=String(text).match(/[\[{][\s\S]*[\]}]/);
+  try{ return JSON.parse(m[0]); }catch(_){ throw {code:"invalid_json"}; }
+}
+if (!window.claude?.use){
+  fetch("/api/analyze").then(r=>r.ok?r.json():null).then(j=>{ if(j?.enabled){ apiOn=true; $("askBtn").hidden=false; } }).catch(()=>{});
+}
+if (window.claude?.use){
+  claude.use("sample").then(async s=>{
+    if(!s) return; const lim=await s.limits().catch(()=>null);
+    if(lim?.images){ sample=s; $("askBtn").hidden=false; }
+  });
+  claude.use("downloads").then(d=>{ downloads=d; });
+}
+})();
+</script>
+</body>
+</html>
